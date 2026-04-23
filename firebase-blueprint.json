@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "Unit": {
+      "title": "Apartment Unit",
+      "description": "Represents an individual flat or apartment in the building.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "unitNumber": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "tenantName": { "type": "string" },
+        "lastMeterReading": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["unitNumber"]
+    },
+    "Bill": {
+      "title": "Monthly Bill",
+      "description": "A bill generated for a specific unit for a specific month.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "unitId": { "type": "string" },
+        "unitNumber": { "type": "string" },
+        "month": { "type": "number" },
+        "year": { "type": "number" },
+        "charges": {
+          "type": "object",
+          "properties": {
+            "defaultCharge": { "type": "number", "description": "Standard monthly maintenance fee" },
+            "waterCharge": { "type": "number", "description": "Charge based on water meter consumption" },
+            "securityShare": { "type": "number", "description": "Equally divided security guard salary" },
+            "softenerShare": { "type": "number", "description": "Share of water softener monthly maintenance/salt" },
+            "electricityShare": { "type": "number", "description": "Share of common area electricity bills" },
+            "miscCharge": { "type": "number", "description": "Share of other miscellaneous repairs/costs" }
+          }
+        },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["paid", "pending", "overdue"] },
+        "paidAt": { "type": "string", "format": "date-time" },
+        "meterReadingStart": { "type": "number" },
+        "meterReadingEnd": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["unitId", "month", "year", "totalAmount", "status"]
+    },
+    "Expense": {
+      "title": "Building Expense",
+      "description": "Common area expenses paid by the management.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["security", "water_softener", "elevator_amc", "electricity", "repair", "misc"] },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "isPeriodic": { "type": "boolean" },
+        "notes": { "type": "string" }
+      },
+      "required": ["type", "amount", "date"]
+    }
+  },
+  "firestore": {
+    "units": {
+      "schema": "Unit",
+      "description": "List of all apartments tracked by the system."
+    },
+    "bills": {
+      "schema": "Bill",
+      "description": "History of monthly payments and charges for all units."
+    },
+    "expenses": {
+      "schema": "Expense",
+      "description": "Tracking of all outgoing costs for the building maintenance."
+    }
+  }
+}

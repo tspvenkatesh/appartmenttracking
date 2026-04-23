@@ -1,0 +1,110 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Default Deny Catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helper Functions ---
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      // In this setup, we allow the specific user email or check a dedicated admins collection
+      return isSignedIn() && (
+        request.auth.token.email == 'tsp.venkatesh@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Entity Validations
+    
+    function isValidUnit(data) {
+      return data.unitNumber is string && data.unitNumber.size() > 0 && data.unitNumber.size() <= 20
+          && data.ownerName is string && data.ownerName.size() <= 100
+          && data.tenantName is string && data.tenantName.size() <= 100
+          && data.lastMeterReading is number && data.lastMeterReading >= 0;
+    }
+
+    function isValidBill(data) {
+      return data.unitId is string && isValidId(data.unitId)
+          && data.month is number && data.month >= 1 && data.month <= 12
+          && data.year is number && data.year >= 2000 && data.year <= 2100
+          && data.totalAmount is number && data.totalAmount >= 0
+          && data.status in ['paid', 'pending', 'overdue']
+          && data.charges is map
+          && data.charges.defaultCharge is number && data.charges.defaultCharge >= 0;
+    }
+
+    function isValidExpense(data) {
+      return data.type in ['security', 'water_softener', 'elevator_amc', 'electricity', 'repair', 'misc']
+          && data.amount is number && data.amount > 0
+          && data.date is string // Use ISO string or Timestamp? Blueprint says string format date-time
+          && data.title is string && data.title.size() <= 200;
+    }
+
+    // --- Collection Rules ---
+
+    match /units/{unitId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isAdmin() && isValidUnit(incoming()) && isValidId(unitId);
+      allow update: if isAdmin() && isValidUnit(incoming()) && (
+        // Action: Update details
+        incoming().diff(existing()).affectedKeys().hasOnly(['unitNumber', 'ownerName', 'tenantName', 'lastMeterReading'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /bills/{billId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn(); // In a real app, you'd filter: if resource.data.tenantEmail == request.auth.token.email
+      allow create: if isAdmin() && isValidBill(incoming()) && isValidId(billId);
+      allow update: if (isAdmin() || (isSignedIn() && incoming().status == 'paid')) && isValidBill(incoming()) && (
+        // Action: Mark as Paid
+        (incoming().status == 'paid' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'paidAt'])) ||
+        // Action: Admin edit
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['charges', 'totalAmount', 'status', 'month', 'year']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidExpense(incoming()) && isValidId(expenseId);
+      allow update: if isAdmin() && isValidExpense(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /configs/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Only manageable via Firebase Console or special script
+    }
+  }
+}
